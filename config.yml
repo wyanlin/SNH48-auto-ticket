@@ -1,0 +1,8 @@
+username: yourUsername
+password: yourPassword
+nick_name: wyl123
+ticket_type: [2, 1, 3]
+ticket_num: 1
+target_url:
+driver_path: "./yourChromeDriverPath"
+index_url: "https://shop.48.cn/"
