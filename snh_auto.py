@@ -1,6 +1,8 @@
 import os
 import time
 import pickle
+
+import requests
 from selenium import webdriver
 import yaml
 from selenium.webdriver import DesiredCapabilities
@@ -23,7 +25,8 @@ class SnhTickets:
         self.nick_name = nick_name
         self.driver = None
         self.index_url = index_url
-
+        self.pay_url = None
+        self.pay_pic = None
 
     def set_cookie(self):
         try:
@@ -60,9 +63,11 @@ class SnhTickets:
 
         options = webdriver.ChromeOptions()
         # 禁止图片、js、css加载
-        prefs = {"profile.managed_default_content_settings.images": 2,
+
+        prefs = {
+                 "profile.managed_default_content_settings.images": 2,
                  "profile.managed_default_content_settings.javascript": 1,
-                 'permissions.default.stylesheet': 2}
+                 "permissions.default.stylesheet": 2}
         options.add_experimental_option("prefs", prefs)
 
         # 更换等待策略为不等待浏览器加载完全就进行下一步操作
@@ -111,7 +116,7 @@ class SnhTickets:
                 raise Exception("===尚未开售，刷新等待===")
 
             try:
-                # 门票种类
+                # 门票种类 is_2:写生款式 is_4：门票种类
                 selects = box.find_elements_by_css_selector('span.is_4>em')
                 print("=== 门票类型： ", [type.text for type in selects] , "===")
                 for item in self.ticket_type:
@@ -137,13 +142,16 @@ class SnhTickets:
 
             if buybutton_text == "立即购买":
                 buybutton.click()
-            time.sleep(0.1)
+            time.sleep(0.5)
+            if self.driver.title == "门票详情":
+                break
 
     def pay_for_it(self):
         if self.status in [3, 4]:
             if self.driver.title == "门票详情":
+                time.sleep(1)
                 ticket_info = self.driver.find_element_by_class_name('sp_list_xx.a1.ccc')
-                ticket_title = ticket_info.find_element_by_css_selector('span.sp_list_2a kb>a').text
+                ticket_title = ticket_info.find_element_by_css_selector('span.sp_list_2a.kb>a').text
                 ticket_num = ticket_info.find_element_by_css_selector('span.sp_list_4.kb.lh100').text
                 ticket_price = ticket_info.find_element_by_css_selector('span.sp_list_4.lh100.kb.pink').text
                 ticket_score = ticket_info.find_element_by_css_selector('span.sp_list_5a.lh100.kb.pink').text
@@ -167,6 +175,13 @@ class SnhTickets:
 
                 while self.driver.title != "扫码支付":
                     time.sleep(0.5)
+                    if self.driver.title == "扫码支付":
+                        break
+
+                print("已显示付款码")
+                self.pay_url = self.driver.current_url
+                self.pay_pic = self.driver.find_element_by_id("imgcode").get_attribute("src")
+                print("pay_url: ", self.pay_url, " pay_pic: ", self.pay_pic)
 
 
     # 获取账号的cookie信息
@@ -203,18 +218,34 @@ class SnhTickets:
         else:
             print("网络可能有误， 不修复我真的很难帮你办事=.=")
 
+    def download_img(img_url):
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36'
+        }
+        r = requests.get(img_url, headers=headers, stream=True)
+        # print(r.status_code) # 返回状态码
+        if r.status_code == 200:
+            # 截取图片文件名
+            img_name = img_url.split('/').pop()
+            print("img_name: ", img_name)
+            with open(img_name, 'wb') as f:
+                f.write(r.content)
+            return True
 
-if __name__ == '__main__':
+def initData():
     try:
         with open('config.yml', 'r', encoding='utf-8') as f:
             config = yaml.load(f.read(), Loader=yaml.FullLoader)
             con = SnhTickets(config['username'], config['password'], config['nick_name'],
                              config['ticket_type'], config['ticket_num'],
                              config['target_url'], config['index_url'], config['driver_path'])
-            con.enter_48shop()
+            return con
     except Exception as e:
         print(e)
         exit(1)
 
+if __name__ == '__main__':
+    con = initData()
+    con.enter_48shop()
     con.choose_ticket()
     con.pay_for_it()
